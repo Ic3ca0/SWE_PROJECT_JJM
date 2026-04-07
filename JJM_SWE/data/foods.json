@@ -1,0 +1,14 @@
+[
+  {
+    "food_id": "food-1",
+    "name": "Steak",
+    "kcal_per_g": 1.32,
+    "food_type": "protein"
+  },
+  {
+    "food_id": "food-2",
+    "name": "Chicken",
+    "kcal_per_g": 0.37,
+    "food_type": "protein"
+  }
+]
