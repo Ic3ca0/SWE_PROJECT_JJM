@@ -63,6 +63,14 @@
       margin: 0;
     }
 
+    .logout-btn {
+      background: #555;
+      width: auto;
+      padding: 8px 16px;
+      margin: 0;
+      font-size: 13px;
+    }
+
     .entry-card, .food-card {
       background: #202020;
       border: 1px solid #333;
@@ -102,14 +110,24 @@
       color: #a5d6a7;
       min-height: 20px;
     }
-    
+
+    .user-info {
+      color: #aaa;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div>
       <div class="panel">
-        <h1>Food Graph</h1>
+        <div class="row">
+          <h1>Food Graph</h1>
+          <div class="row" style="gap: 8px;">
+            <span id="username-display" class="user-info"></span>
+            <button id="logout-btn" class="logout-btn">Logout</button>
+          </div>
+        </div>
         <label for="date-input">Date</label>
         <input id="date-input" type="date" />
       </div>

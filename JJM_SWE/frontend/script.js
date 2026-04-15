@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:8080/api";
+const API_BASE = "/api";
 
 const dateInput = document.getElementById("date-input");
 const foodNameInput = document.getElementById("food-name");
@@ -17,6 +17,7 @@ const foodsList = document.getElementById("foods-list");
 const entriesList = document.getElementById("entries-list");
 const dailyTotal = document.getElementById("daily-total");
 const graphTotal = document.getElementById("graph-total");
+const usernameDisplay = document.getElementById("username-display");
 const svg = d3.select("#graph");
 
 function getTodayDate() {
@@ -25,8 +26,31 @@ function getTodayDate() {
 
 dateInput.value = getTodayDate();
 
+// check session and redirect if not logged in
+async function checkAuth() {
+  try {
+    const res = await fetch(`${API_BASE}/me`);
+    if (!res.ok) {
+      window.location.href = "/login.html";
+      return false;
+    }
+    const data = await res.json();
+    if (usernameDisplay && data.username) {
+      usernameDisplay.textContent = data.username;
+    }
+    return true;
+  } catch {
+    window.location.href = "/login.html";
+    return false;
+  }
+}
+
 async function apiGet(url) {
   const res = await fetch(url);
+  if (res.status === 401) {
+    window.location.href = "/login.html";
+    return;
+  }
   if (!res.ok) {
     throw new Error(await res.text());
   }
@@ -40,6 +64,11 @@ async function apiPost(url, body) {
     body: JSON.stringify(body),
   });
 
+  if (res.status === 401) {
+    window.location.href = "/login.html";
+    return;
+  }
+
   if (!res.ok) {
     throw new Error(await res.text());
   }
@@ -49,14 +78,25 @@ async function apiPost(url, body) {
 
 async function apiDelete(url) {
   const res = await fetch(url, { method: "DELETE" });
+  if (res.status === 401) {
+    window.location.href = "/login.html";
+    return;
+  }
   if (!res.ok) {
     throw new Error(await res.text());
   }
   return res.json();
 }
 
+async function logout() {
+  await fetch(`${API_BASE}/logout`, { method: "POST" });
+  window.location.href = "/login.html";
+}
+
+// load and render food data
 async function loadFoods() {
   const foods = await apiGet(`${API_BASE}/foods`);
+  if (!foods) return;
 
   foodSelect.innerHTML = "";
 
@@ -121,6 +161,7 @@ function renderFoodsList(foods) {
 async function loadEntries() {
   const date = dateInput.value;
   const data = await apiGet(`${API_BASE}/entries?date=${encodeURIComponent(date)}`);
+  if (!data) return;
 
   dailyTotal.textContent = `${data.daily_total_calories.toFixed(2)} cal`;
   entriesList.innerHTML = "";
@@ -163,6 +204,7 @@ async function loadEntries() {
   });
 }
 
+// graph rendering with d3
 function colorForGroup(group) {
   const colors = {
     fruit: "#ffd54f",
@@ -181,6 +223,8 @@ function colorForGroup(group) {
 async function loadGraph() {
   const date = dateInput.value;
   const data = await apiGet(`${API_BASE}/graph?date=${encodeURIComponent(date)}`);
+  if (!data) return;
+
   graphTotal.textContent = `${data.daily_total_calories.toFixed(2)} cal`;
   renderGraph(data);
 }
@@ -353,5 +397,9 @@ dateInput.addEventListener("change", async () => {
   await loadGraph();
 });
 
-refreshAll();
- 
+document.getElementById("logout-btn").addEventListener("click", logout);
+
+// verify auth then load everything
+checkAuth().then((ok) => {
+  if (ok) refreshAll();
+});
