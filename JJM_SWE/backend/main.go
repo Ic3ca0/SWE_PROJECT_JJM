@@ -6,17 +6,14 @@ import (
 	"log"
 	"math"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 )
 
-const FoodsPath = "../data/foods.json"
-const FoodLogPath = "../data/food_log.json"
-
 type Food struct {
 	FoodID   string  `json:"food_id"`
+	UserID   int     `json:"-"`
 	Name     string  `json:"name"`
 	KcalPerG float64 `json:"kcal_per_g"`
 	FoodType string  `json:"food_type"`
@@ -24,6 +21,7 @@ type Food struct {
 
 type FoodEntry struct {
 	EntryID  int     `json:"entry_id"`
+	UserID   int     `json:"-"`
 	Date     string  `json:"date"`
 	FoodID   string  `json:"food_id"`
 	Name     string  `json:"name"`
@@ -71,17 +69,24 @@ type EntriesResponse struct {
 	Entries            []FoodEntry `json:"entries"`
 }
 
+// initialize server and routes
 func main() {
-	if err := ensureDataFiles(); err != nil {
+	if err := initDB(); err != nil {
 		log.Fatal(err)
 	}
+	defer db.Close()
 
-	http.HandleFunc("/api/foods", withCORS(handleFoods))
-	http.HandleFunc("/api/foods/", withCORS(handleDeleteFood))
-	http.HandleFunc("/api/entry", withCORS(handleAddEntry))
-	http.HandleFunc("/api/entry/", withCORS(handleDeleteEntry))
-	http.HandleFunc("/api/entries", withCORS(handleGetEntries))
-	http.HandleFunc("/api/graph", withCORS(handleGraph))
+	http.HandleFunc("/api/register", withCORS(handleRegister))
+	http.HandleFunc("/api/login", withCORS(handleLogin))
+	http.HandleFunc("/api/logout", withCORS(handleLogout))
+	http.HandleFunc("/api/me", withCORS(handleMe))
+
+	http.HandleFunc("/api/foods", withCORS(withAuth(handleFoods)))
+	http.HandleFunc("/api/foods/", withCORS(withAuth(handleDeleteFood)))
+	http.HandleFunc("/api/entry", withCORS(withAuth(handleAddEntry)))
+	http.HandleFunc("/api/entry/", withCORS(withAuth(handleDeleteEntry)))
+	http.HandleFunc("/api/entries", withCORS(withAuth(handleGetEntries)))
+	http.HandleFunc("/api/graph", withCORS(withAuth(handleGraph)))
 
 	fs := http.FileServer(http.Dir("../frontend"))
 	http.Handle("/", fs)
@@ -92,75 +97,16 @@ func main() {
 
 func withCORS(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 		next(w, r)
 	}
-}
-
-func ensureDataFiles() error {
-	dataDir := "../data"
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		return err
-	}
-
-	if _, err := os.Stat(FoodsPath); os.IsNotExist(err) {
-		if err := writeJSON(FoodsPath, []Food{}); err != nil {
-			return err
-		}
-	}
-
-	if _, err := os.Stat(FoodLogPath); os.IsNotExist(err) {
-		if err := writeJSON(FoodLogPath, []FoodEntry{}); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func readFoods() ([]Food, error) {
-	var foods []Food
-	err := readJSON(FoodsPath, &foods)
-	return foods, err
-}
-
-func writeFoods(foods []Food) error {
-	return writeJSON(FoodsPath, foods)
-}
-
-func readEntries() ([]FoodEntry, error) {
-	var entries []FoodEntry
-	err := readJSON(FoodLogPath, &entries)
-	return entries, err
-}
-
-func writeEntries(entries []FoodEntry) error {
-	return writeJSON(FoodLogPath, entries)
-}
-
-func readJSON(path string, target interface{}) error {
-	file, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	if len(file) == 0 {
-		return nil
-	}
-	return json.Unmarshal(file, target)
-}
-
-func writeJSON(path string, data interface{}) error {
-	bytes, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, bytes, 0644)
 }
 
 func normalize(s string) string {
@@ -184,48 +130,250 @@ func round2(n float64) float64 {
 	return math.Round(n*100) / 100
 }
 
-func nextFoodID(foods []Food) string {
-	maxNum := 0
-	for _, f := range foods {
-		if strings.HasPrefix(f.FoodID, "food-") {
-			numStr := strings.TrimPrefix(f.FoodID, "food-")
-			num, err := strconv.Atoi(numStr)
-			if err == nil && num > maxNum {
-				maxNum = num
-			}
+// food crud handlers
+func handleFoods(w http.ResponseWriter, r *http.Request) {
+	userID, _ := getUserIDFromRequest(r)
+
+	switch r.Method {
+	case http.MethodGet:
+		query := normalize(r.URL.Query().Get("query"))
+
+		var foods []Food
+		var err error
+		if query != "" {
+			foods, err = dbSearchFoods(userID, query)
+		} else {
+			foods, err = dbGetFoodsByUser(userID)
 		}
+
+		if err != nil {
+			http.Error(w, "Failed to read foods", http.StatusInternalServerError)
+			return
+		}
+
+		if foods == nil {
+			foods = []Food{}
+		}
+
+		writeJSONResponse(w, foods)
+
+	case http.MethodPost:
+		var req CreateFoodRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		req.Name = strings.TrimSpace(req.Name)
+		req.FoodType = normalize(req.FoodType)
+
+		if req.Name == "" || req.Calories <= 0 || req.ServingGrams <= 0 || req.FoodType == "" {
+			http.Error(w, "All fields are required and must be positive", http.StatusBadRequest)
+			return
+		}
+
+		exists, err := dbFoodExistsByName(userID, req.Name)
+		if err != nil {
+			http.Error(w, "Failed to check food", http.StatusInternalServerError)
+			return
+		}
+		if exists {
+			http.Error(w, "Food already exists", http.StatusBadRequest)
+			return
+		}
+
+		foodID, err := dbNextFoodID()
+		if err != nil {
+			http.Error(w, "Failed to generate food ID", http.StatusInternalServerError)
+			return
+		}
+
+		kcalPerG := round2(req.Calories / req.ServingGrams)
+		newFood := Food{
+			FoodID:   foodID,
+			UserID:   userID,
+			Name:     req.Name,
+			KcalPerG: kcalPerG,
+			FoodType: req.FoodType,
+		}
+
+		if err := dbInsertFood(newFood); err != nil {
+			http.Error(w, "Failed to save food", http.StatusInternalServerError)
+			return
+		}
+
+		writeJSONResponse(w, newFood)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
-	return fmt.Sprintf("food-%d", maxNum+1)
 }
 
-func nextEntryID(entries []FoodEntry) int {
-	maxID := 0
+func handleDeleteFood(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID, _ := getUserIDFromRequest(r)
+	foodID := strings.TrimPrefix(r.URL.Path, "/api/foods/")
+	if foodID == "" {
+		http.Error(w, "Food ID required", http.StatusBadRequest)
+		return
+	}
+
+	found, err := dbDeleteFood(foodID, userID)
+	if err != nil {
+		http.Error(w, "Failed to delete food", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "Food not found", http.StatusNotFound)
+		return
+	}
+
+	writeJSONResponse(w, map[string]bool{"success": true})
+}
+
+// entry logging handlers
+func handleAddEntry(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID, _ := getUserIDFromRequest(r)
+
+	var req AddEntryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if strings.TrimSpace(req.Date) == "" {
+		req.Date = time.Now().Format("2006-01-02")
+	}
+
+	if strings.TrimSpace(req.FoodID) == "" || req.Grams <= 0 {
+		http.Error(w, "food_id and positive grams are required", http.StatusBadRequest)
+		return
+	}
+
+	food, err := dbGetFoodByID(req.FoodID, userID)
+	if err != nil {
+		http.Error(w, "Food not found", http.StatusNotFound)
+		return
+	}
+
+	newEntry := FoodEntry{
+		UserID:   userID,
+		Date:     req.Date,
+		FoodID:   food.FoodID,
+		Name:     food.Name,
+		Grams:    req.Grams,
+		KcalPerG: food.KcalPerG,
+		FoodType: food.FoodType,
+		Calories: round2(req.Grams * food.KcalPerG),
+	}
+
+	entryID, err := dbInsertEntry(newEntry)
+	if err != nil {
+		http.Error(w, "Failed to save entry", http.StatusInternalServerError)
+		return
+	}
+
+	newEntry.EntryID = entryID
+	writeJSONResponse(w, newEntry)
+}
+
+func handleDeleteEntry(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID, _ := getUserIDFromRequest(r)
+	entryIDStr := strings.TrimPrefix(r.URL.Path, "/api/entry/")
+	entryID, err := strconv.Atoi(entryIDStr)
+	if err != nil {
+		http.Error(w, "Invalid entry ID", http.StatusBadRequest)
+		return
+	}
+
+	found, err := dbDeleteEntry(entryID, userID)
+	if err != nil {
+		http.Error(w, "Failed to delete entry", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "Entry not found", http.StatusNotFound)
+		return
+	}
+
+	writeJSONResponse(w, map[string]bool{"success": true})
+}
+
+func handleGetEntries(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID, _ := getUserIDFromRequest(r)
+	date := strings.TrimSpace(r.URL.Query().Get("date"))
+	if date == "" {
+		date = time.Now().Format("2006-01-02")
+	}
+
+	entries, err := dbGetEntriesByDate(userID, date)
+	if err != nil {
+		http.Error(w, "Failed to read entries", http.StatusInternalServerError)
+		return
+	}
+
+	if entries == nil {
+		entries = []FoodEntry{}
+	}
+
+	total := 0.0
 	for _, e := range entries {
-		if e.EntryID > maxID {
-			maxID = e.EntryID
-		}
+		total += e.Calories
 	}
-	return maxID + 1
+
+	resp := EntriesResponse{
+		Date:               date,
+		DailyTotalCalories: round2(total),
+		Entries:            entries,
+	}
+
+	writeJSONResponse(w, resp)
 }
 
-func findFoodByID(foods []Food, id string) *Food {
-	for _, f := range foods {
-		if f.FoodID == id {
-			copyFood := f
-			return &copyFood
-		}
+// graph data builder
+func handleGraph(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
 	}
-	return nil
-}
 
-func filterEntriesByDate(entries []FoodEntry, date string) []FoodEntry {
-	result := []FoodEntry{}
-	for _, e := range entries {
-		if e.Date == date {
-			result = append(result, e)
-		}
+	userID, _ := getUserIDFromRequest(r)
+	date := strings.TrimSpace(r.URL.Query().Get("date"))
+	if date == "" {
+		date = time.Now().Format("2006-01-02")
 	}
-	return result
+
+	entries, err := dbGetEntriesByDate(userID, date)
+	if err != nil {
+		http.Error(w, "Failed to read entries", http.StatusInternalServerError)
+		return
+	}
+
+	if entries == nil {
+		entries = []FoodEntry{}
+	}
+
+	graph := buildGraph(entries)
+	writeJSONResponse(w, graph)
 }
 
 func buildGraph(entries []FoodEntry) GraphResponse {
@@ -288,277 +436,7 @@ func buildGraph(entries []FoodEntry) GraphResponse {
 	}
 }
 
-func handleFoods(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		foods, err := readFoods()
-		if err != nil {
-			http.Error(w, "Failed to read foods", http.StatusInternalServerError)
-			return
-		}
-
-		query := normalize(r.URL.Query().Get("query"))
-		if query != "" {
-			filtered := []Food{}
-			for _, f := range foods {
-				if strings.Contains(normalize(f.Name), query) || strings.Contains(normalize(f.FoodType), query) {
-					filtered = append(filtered, f)
-				}
-			}
-			foods = filtered
-		}
-
-		writeJSONResponse(w, foods)
-
-	case http.MethodPost:
-		var req CreateFoodRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
-			return
-		}
-
-		req.Name = strings.TrimSpace(req.Name)
-		req.FoodType = normalize(req.FoodType)
-
-		if req.Name == "" || req.Calories <= 0 || req.ServingGrams <= 0 || req.FoodType == "" {
-			http.Error(w, "All fields are required and must be positive", http.StatusBadRequest)
-			return
-		}
-
-		kcalPerG := round2(req.Calories / req.ServingGrams)
-
-		foods, err := readFoods()
-		if err != nil {
-			http.Error(w, "Failed to read foods", http.StatusInternalServerError)
-			return
-		}
-
-		for _, f := range foods {
-			if normalize(f.Name) == normalize(req.Name) {
-				http.Error(w, "Food already exists", http.StatusBadRequest)
-				return
-			}
-		}
-
-		newFood := Food{
-			FoodID:   nextFoodID(foods),
-			Name:     req.Name,
-			KcalPerG: kcalPerG,
-			FoodType: req.FoodType,
-		}
-
-		foods = append(foods, newFood)
-
-		if err := writeFoods(foods); err != nil {
-			http.Error(w, "Failed to save food", http.StatusInternalServerError)
-			return
-		}
-
-		writeJSONResponse(w, newFood)
-
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func handleDeleteFood(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	foodID := strings.TrimPrefix(r.URL.Path, "/api/foods/")
-	if foodID == "" {
-		http.Error(w, "Food ID required", http.StatusBadRequest)
-		return
-	}
-
-	foods, err := readFoods()
-	if err != nil {
-		http.Error(w, "Failed to read foods", http.StatusInternalServerError)
-		return
-	}
-
-	filteredFoods := []Food{}
-	found := false
-	for _, f := range foods {
-		if f.FoodID == foodID {
-			found = true
-			continue
-		}
-		filteredFoods = append(filteredFoods, f)
-	}
-
-	if !found {
-		http.Error(w, "Food not found", http.StatusNotFound)
-		return
-	}
-
-	if err := writeFoods(filteredFoods); err != nil {
-		http.Error(w, "Failed to delete food", http.StatusInternalServerError)
-		return
-	}
-
-	writeJSONResponse(w, map[string]bool{"success": true})
-}
-
-func handleAddEntry(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req AddEntryRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	if strings.TrimSpace(req.Date) == "" {
-		req.Date = time.Now().Format("2006-01-02")
-	}
-
-	if strings.TrimSpace(req.FoodID) == "" || req.Grams <= 0 {
-		http.Error(w, "food_id and positive grams are required", http.StatusBadRequest)
-		return
-	}
-
-	foods, err := readFoods()
-	if err != nil {
-		http.Error(w, "Failed to read foods", http.StatusInternalServerError)
-		return
-	}
-
-	food := findFoodByID(foods, req.FoodID)
-	if food == nil {
-		http.Error(w, "Food not found", http.StatusNotFound)
-		return
-	}
-
-	entries, err := readEntries()
-	if err != nil {
-		http.Error(w, "Failed to read entries", http.StatusInternalServerError)
-		return
-	}
-
-	newEntry := FoodEntry{
-		EntryID:  nextEntryID(entries),
-		Date:     req.Date,
-		FoodID:   food.FoodID,
-		Name:     food.Name,
-		Grams:    req.Grams,
-		KcalPerG: food.KcalPerG,
-		FoodType: food.FoodType,
-		Calories: round2(req.Grams * food.KcalPerG),
-	}
-
-	entries = append(entries, newEntry)
-
-	if err := writeEntries(entries); err != nil {
-		http.Error(w, "Failed to save entry", http.StatusInternalServerError)
-		return
-	}
-
-	writeJSONResponse(w, newEntry)
-}
-
-func handleDeleteEntry(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	entryIDStr := strings.TrimPrefix(r.URL.Path, "/api/entry/")
-	entryID, err := strconv.Atoi(entryIDStr)
-	if err != nil {
-		http.Error(w, "Invalid entry ID", http.StatusBadRequest)
-		return
-	}
-
-	entries, err := readEntries()
-	if err != nil {
-		http.Error(w, "Failed to read entries", http.StatusInternalServerError)
-		return
-	}
-
-	filtered := []FoodEntry{}
-	found := false
-	for _, e := range entries {
-		if e.EntryID == entryID {
-			found = true
-			continue
-		}
-		filtered = append(filtered, e)
-	}
-
-	if !found {
-		http.Error(w, "Entry not found", http.StatusNotFound)
-		return
-	}
-
-	if err := writeEntries(filtered); err != nil {
-		http.Error(w, "Failed to delete entry", http.StatusInternalServerError)
-		return
-	}
-
-	writeJSONResponse(w, map[string]bool{"success": true})
-}
-
-func handleGetEntries(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	date := strings.TrimSpace(r.URL.Query().Get("date"))
-	if date == "" {
-		date = time.Now().Format("2006-01-02")
-	}
-
-	entries, err := readEntries()
-	if err != nil {
-		http.Error(w, "Failed to read entries", http.StatusInternalServerError)
-		return
-	}
-
-	dayEntries := filterEntriesByDate(entries, date)
-	total := 0.0
-	for _, e := range dayEntries {
-		total += e.Calories
-	}
-
-	resp := EntriesResponse{
-		Date:               date,
-		DailyTotalCalories: round2(total),
-		Entries:            dayEntries,
-	}
-
-	writeJSONResponse(w, resp)
-}
-
-func handleGraph(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	date := strings.TrimSpace(r.URL.Query().Get("date"))
-	if date == "" {
-		date = time.Now().Format("2006-01-02")
-	}
-
-	entries, err := readEntries()
-	if err != nil {
-		http.Error(w, "Failed to read entries", http.StatusInternalServerError)
-		return
-	}
-
-	dayEntries := filterEntriesByDate(entries, date)
-	graph := buildGraph(dayEntries)
-	writeJSONResponse(w, graph)
-}
-
 func writeJSONResponse(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(data)
+	json.NewEncoder(w).Encode(data)
 }
