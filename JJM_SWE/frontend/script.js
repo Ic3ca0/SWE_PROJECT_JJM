@@ -1,6 +1,66 @@
 const API_BASE = "/api";
 
-const dateInput = document.getElementById("date-input");
+// ── Date tab state ──
+let selectedDate = getTodayDate();
+
+function getTodayDate() {
+  return new Date().toISOString().split("T")[0];
+}
+
+function buildDateTabs() {
+  const tabs = document.getElementById("date-tabs");
+  const wrapper = document.getElementById("date-tabs-wrapper");
+  const today = new Date();
+  const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  tabs.innerHTML = "";
+
+  // 90 days back through 7 days forward
+  for (let i = 90; i >= -7; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const iso = d.toISOString().split("T")[0];
+
+    const tab = document.createElement("div");
+    tab.className = "date-tab" + (iso === selectedDate ? " active" : "");
+    tab.dataset.date = iso;
+
+    tab.innerHTML = `
+      <span class="tab-day">${days[d.getDay()]}</span>
+      <span class="tab-date">${months[d.getMonth()]} ${d.getDate()}</span>
+    `;
+
+    tab.addEventListener("click", async () => {
+      selectedDate = iso;
+      document.querySelectorAll(".date-tab").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      await loadEntries();
+      await loadGraph();
+    });
+
+    tabs.appendChild(tab);
+  }
+
+  // center today's tab in the scroll container
+  const activeTab = tabs.querySelector(".active");
+  if (activeTab) {
+    setTimeout(() => {
+      const tabLeft = activeTab.offsetLeft;
+      const tabWidth = activeTab.offsetWidth;
+      const containerWidth = wrapper.offsetWidth;
+      tabs.scrollLeft = tabLeft - containerWidth / 2 + tabWidth / 2;
+    }, 50);
+  }
+}
+
+document.getElementById("scroll-left").addEventListener("click", () => {
+  document.getElementById("date-tabs").scrollBy({ left: -160, behavior: "smooth" });
+});
+document.getElementById("scroll-right").addEventListener("click", () => {
+  document.getElementById("date-tabs").scrollBy({ left: 160, behavior: "smooth" });
+});
+
 const foodNameInput = document.getElementById("food-name");
 const foodCaloriesInput = document.getElementById("food-calories");
 const foodServingGramsInput = document.getElementById("food-serving-grams");
@@ -19,12 +79,6 @@ const dailyTotal = document.getElementById("daily-total");
 const graphTotal = document.getElementById("graph-total");
 const usernameDisplay = document.getElementById("username-display");
 const svg = d3.select("#graph");
-
-function getTodayDate() {
-  return new Date().toISOString().split("T")[0];
-}
-
-dateInput.value = getTodayDate();
 
 // check session and redirect if not logged in
 async function checkAuth() {
@@ -159,7 +213,7 @@ function renderFoodsList(foods) {
 }
 
 async function loadEntries() {
-  const date = dateInput.value;
+  const date = selectedDate;
   const data = await apiGet(`${API_BASE}/entries?date=${encodeURIComponent(date)}`);
   if (!data) return;
 
@@ -221,7 +275,7 @@ function colorForGroup(group) {
 }
 
 async function loadGraph() {
-  const date = dateInput.value;
+  const date = selectedDate;
   const data = await apiGet(`${API_BASE}/graph?date=${encodeURIComponent(date)}`);
   if (!data) return;
 
@@ -369,7 +423,7 @@ addEntryBtn.addEventListener("click", async () => {
 
   const foodID = foodSelect.value;
   const grams = Number(entryGramsInput.value);
-  const date = dateInput.value;
+  const date = selectedDate;
 
   if (!foodID || grams <= 0) {
     addEntryMessage.textContent = "Select a food and enter valid grams.";
@@ -392,14 +446,13 @@ addEntryBtn.addEventListener("click", async () => {
   }
 });
 
-dateInput.addEventListener("change", async () => {
-  await loadEntries();
-  await loadGraph();
-});
 
 document.getElementById("logout-btn").addEventListener("click", logout);
 
 // verify auth then load everything
 checkAuth().then((ok) => {
-  if (ok) refreshAll();
+  if (ok) {
+    buildDateTabs();
+    refreshAll();
+  }
 });

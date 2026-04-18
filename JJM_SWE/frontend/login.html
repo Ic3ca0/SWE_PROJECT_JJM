@@ -5,11 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Food Graph - Login</title>
   <style>
+    :root {
+      --bg:         #0f0505;
+      --bg2:        #1a0a0a;
+      --bg3:        #240e0e;
+      --red:        #7a1515;
+      --red-bright: #a01e1e;
+      --red-dim:    #4a0d0d;
+      --cream:      #f0e6d0;
+      --cream-dim:  #c4b49a;
+      --cream-faint:#7a6a55;
+      --border:     #3a1515;
+    }
+
+    * { box-sizing: border-box; }
+
     body {
       margin: 0;
-      font-family: Arial, sans-serif;
-      background: #111;
-      color: white;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--cream);
       display: flex;
       justify-content: center;
       align-items: center;
@@ -17,70 +32,82 @@
     }
 
     .login-box {
-      background: #1a1a1a;
-      border: 1px solid #333;
+      background: var(--bg2);
+      border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 32px;
+      padding: 36px 32px;
       width: 360px;
     }
 
     h1 {
       margin-top: 0;
-      margin-bottom: 20px;
+      margin-bottom: 6px;
+      font-size: 22px;
+      color: var(--cream);
     }
 
-    input, button {
+    .subtitle {
+      font-size: 12px;
+      color: var(--cream-faint);
+      margin-bottom: 24px;
+    }
+
+    input {
       width: 100%;
-      padding: 10px;
-      margin-top: 8px;
+      padding: 10px 12px;
       margin-bottom: 12px;
-      box-sizing: border-box;
       border-radius: 8px;
-      border: 1px solid #444;
-      background: #222;
-      color: white;
+      border: 1px solid var(--border);
+      background: var(--bg3);
+      color: var(--cream);
       font-size: 14px;
     }
+    input::placeholder { color: var(--cream-faint); }
+    input:focus { outline: none; border-color: var(--red-bright); }
 
     button {
-      cursor: pointer;
-      background: #2d6cdf;
+      width: 100%;
+      padding: 11px;
+      margin-top: 8px;
+      border-radius: 8px;
       border: none;
-      margin-top: 16px;
+      background: var(--red);
+      color: var(--cream);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
     }
-
-    button:hover {
-      opacity: 0.92;
-    }
+    button:hover { background: var(--red-bright); }
 
     .toggle {
       text-align: center;
-      margin-top: 16px;
-      color: #aaa;
-      font-size: 14px;
+      margin-top: 18px;
+      color: var(--cream-faint);
+      font-size: 13px;
     }
 
     .toggle a {
-      color: #5b9cf5;
+      color: var(--cream-dim);
       cursor: pointer;
       text-decoration: underline;
     }
+    .toggle a:hover { color: var(--cream); }
 
     .message {
-      font-size: 14px;
-      color: #ef9a9a;
-      min-height: 20px;
-      margin-top: 4px;
+      font-size: 13px;
+      color: #c07070;
+      min-height: 18px;
+      margin-top: 6px;
     }
 
-    .success {
-      color: #a5d6a7;
-    }
+    .success { color: #90b880; }
   </style>
 </head>
 <body>
   <div class="login-box">
     <h1 id="form-title">Login</h1>
+    <div class="subtitle">Track your daily nutrition</div>
     <input id="username" type="text" placeholder="Username" />
     <input id="password" type="password" placeholder="Password" />
     <button id="submit-btn">Login</button>

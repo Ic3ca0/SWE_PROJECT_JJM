@@ -6,131 +6,355 @@
   <title>Food Graph App</title>
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <style>
+    :root {
+      --bg:         #0f0505;
+      --bg2:        #1a0a0a;
+      --bg3:        #240e0e;
+      --red:        #7a1515;
+      --red-bright: #a01e1e;
+      --red-dim:    #4a0d0d;
+      --cream:      #f0e6d0;
+      --cream-dim:  #c4b49a;
+      --cream-faint:#7a6a55;
+      --border:     #3a1515;
+      --border2:    #2a0f0f;
+    }
+
+    * { box-sizing: border-box; }
+
     body {
       margin: 0;
-      font-family: Arial, sans-serif;
-      background: #111;
-      color: white;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--cream);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
     }
 
-    .container {
-      display: grid;
-      grid-template-columns: 360px 1fr;
-      gap: 20px;
-      padding: 20px;
-      min-height: 100vh;
-      box-sizing: border-box;
+    /* ── Top Header ── */
+    #header {
+      background: var(--bg2);
+      border-bottom: 2px solid var(--border);
+      padding: 12px 20px 0 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      flex-shrink: 0;
     }
 
-    .panel {
-      background: #1a1a1a;
-      border: 1px solid #333;
-      border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 16px;
-    }
-
-    h1, h2, h3 {
-      margin-top: 0;
-    }
-
-    input, select, button {
-      width: 100%;
-      padding: 10px;
-      margin-top: 8px;
-      margin-bottom: 12px;
-      box-sizing: border-box;
-      border-radius: 8px;
-      border: 1px solid #444;
-      background: #222;
-      color: white;
-    }
-
-    button {
-      cursor: pointer;
-      background: #2d6cdf;
-      border: none;
-    }
-
-    button:hover {
-      opacity: 0.92;
-    }
-
-    .delete-btn {
-      background: #b33939;
-      width: auto;
-      padding: 8px 12px;
-      margin: 0;
-    }
-
-    .logout-btn {
-      background: #555;
-      width: auto;
-      padding: 8px 16px;
-      margin: 0;
-      font-size: 13px;
-    }
-
-    .entry-card, .food-card {
-      background: #202020;
-      border: 1px solid #333;
-      border-radius: 10px;
-      padding: 12px;
+    #header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       margin-bottom: 10px;
     }
 
-    .row {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      align-items: center;
+    #app-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--cream);
+      letter-spacing: 0.5px;
     }
 
+    #app-title span {
+      color: var(--red-bright);
+    }
+
+    #user-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    #username-display {
+      color: var(--cream-dim);
+      font-size: 13px;
+    }
+
+    #logout-btn {
+      background: var(--red-dim);
+      color: var(--cream-dim);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 14px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    #logout-btn:hover { background: var(--red); color: var(--cream); }
+
+    /* ── Date Tabs ── */
+    #date-tabs-wrapper {
+      position: relative;
+      overflow: hidden;
+    }
+
+    #date-tabs {
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+      scroll-behavior: smooth;
+      padding-bottom: 0;
+      scrollbar-width: none;
+    }
+    #date-tabs::-webkit-scrollbar { display: none; }
+
+    .date-tab {
+      flex-shrink: 0;
+      padding: 8px 24px 10px 20px;
+      border: none;
+      background: var(--bg3);
+      color: var(--cream-faint);
+      font-size: 13px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s, color 0.15s;
+      position: relative;
+      top: 1px;
+      /* folder tab shape: beveled top-left, slanted right side */
+      clip-path: polygon(0 7px, 7px 0, calc(100% - 14px) 0, 100% 100%, 0 100%);
+    }
+
+    .date-tab:hover {
+      background: var(--red-dim);
+      color: var(--cream-dim);
+    }
+
+    .date-tab.active {
+      background: var(--bg);
+      color: var(--cream);
+      font-weight: 600;
+    }
+
+    .date-tab .tab-day {
+      font-size: 11px;
+      color: inherit;
+      opacity: 0.7;
+      display: block;
+      text-align: center;
+    }
+
+    .date-tab .tab-date {
+      display: block;
+      text-align: center;
+    }
+
+    #scroll-left, #scroll-right {
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 32px;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(to right, var(--bg2), transparent);
+      border: none;
+      color: var(--cream-dim);
+      cursor: pointer;
+      font-size: 16px;
+      z-index: 2;
+      padding: 0;
+    }
+    #scroll-left { left: 0; background: linear-gradient(to right, var(--bg2) 60%, transparent); }
+    #scroll-right { right: 0; background: linear-gradient(to left, var(--bg2) 60%, transparent); }
+    #scroll-left:hover, #scroll-right:hover { color: var(--cream); }
+
+    /* ── Main layout ── */
+    #main {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 16px;
+      padding: 16px;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    #sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--red-dim) transparent;
+    }
+
+    /* ── Panels ── */
+    .panel {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+
+    .panel h2 {
+      margin: 0 0 12px 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--cream-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    /* ── Inputs ── */
+    input, select {
+      width: 100%;
+      padding: 9px 12px;
+      margin-bottom: 10px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: var(--bg3);
+      color: var(--cream);
+      font-size: 13px;
+    }
+    input::placeholder { color: var(--cream-faint); }
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--red-bright);
+    }
+    select option { background: var(--bg3); }
+
+    /* ── Buttons ── */
+    .btn {
+      width: 100%;
+      padding: 10px;
+      border-radius: 7px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: background 0.15s;
+    }
+
+    .btn-primary {
+      background: var(--red);
+      color: var(--cream);
+    }
+    .btn-primary:hover { background: var(--red-bright); }
+
+    .btn-danger {
+      background: transparent;
+      border: 1px solid var(--red-dim);
+      color: #c07070;
+      width: auto;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .btn-danger:hover { background: var(--red-dim); color: var(--cream); }
+
+    /* ── Cards ── */
+    .entry-card, .food-card {
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+    }
+
+    .card-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .card-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--cream);
+    }
+
+    .card-meta {
+      font-size: 11px;
+      color: var(--cream-faint);
+      margin-top: 2px;
+    }
+
+    /* ── Daily total ── */
+    .panel-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .panel-header-row h2 { margin: 0; }
+
+    #daily-total {
+      font-size: 13px;
+      color: var(--red-bright);
+      font-weight: 700;
+    }
+
+    /* ── Message ── */
+    .message {
+      font-size: 12px;
+      color: #b0c8a0;
+      min-height: 16px;
+      margin-top: 2px;
+    }
+
+    /* ── Graph panel ── */
     #graph-container {
-      background: #151515;
-      border: 1px solid #333;
-      border-radius: 12px;
-      padding: 12px;
-      height: calc(100vh - 40px);
-      box-sizing: border-box;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #graph-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      flex-shrink: 0;
+    }
+
+    #graph-header h2 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--cream-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    #graph-total {
+      font-size: 13px;
+      color: var(--red-bright);
+      font-weight: 700;
     }
 
     #graph {
+      flex: 1;
       width: 100%;
-      height: calc(100% - 60px);
     }
 
-    .small {
-      color: #bbb;
-      font-size: 14px;
-    }
-
-    .message {
-      font-size: 14px;
-      color: #a5d6a7;
-      min-height: 20px;
-    }
-
-    .user-info {
-      color: #aaa;
-      font-size: 14px;
-    }
+    .small { color: var(--cream-faint); font-size: 12px; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div>
-      <div class="panel">
-        <div class="row">
-          <h1>Food Graph</h1>
-          <div class="row" style="gap: 8px;">
-            <span id="username-display" class="user-info"></span>
-            <button id="logout-btn" class="logout-btn">Logout</button>
-          </div>
-        </div>
-        <label for="date-input">Date</label>
-        <input id="date-input" type="date" />
+
+  <!-- Top Header + Date Tabs -->
+  <div id="header">
+    <div id="header-top">
+      <div id="app-title">Food<span>Graph</span></div>
+      <div id="user-row">
+        <span id="username-display"></span>
+        <button id="logout-btn">Logout</button>
       </div>
+    </div>
+
+    <div id="date-tabs-wrapper">
+      <button id="scroll-left">&#8249;</button>
+      <div id="date-tabs"></div>
+      <button id="scroll-right">&#8250;</button>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div id="main">
+    <div id="sidebar">
 
       <div class="panel">
         <h2>Create Food</h2>
@@ -148,7 +372,7 @@
           <option value="sweets">Sweets</option>
           <option value="other">Other</option>
         </select>
-        <button id="create-food-btn">Save Food</button>
+        <button id="create-food-btn" class="btn btn-primary">Save Food</button>
         <div id="create-food-message" class="message"></div>
       </div>
 
@@ -156,26 +380,23 @@
         <h2>Log Food</h2>
         <select id="food-select"></select>
         <input id="entry-grams" type="number" step="0.01" placeholder="Grams eaten" />
-        <button id="add-entry-btn">Add Entry</button>
+        <button id="add-entry-btn" class="btn btn-primary">Add Entry</button>
         <div id="add-entry-message" class="message"></div>
       </div>
 
-      <div class="panel">
-        <h2>Saved Foods</h2>
-        <div id="foods-list"></div>
-      </div>
 
       <div class="panel">
-        <div class="row">
+        <div class="panel-header-row">
           <h2>Daily Log</h2>
           <strong id="daily-total">0.00 cal</strong>
         </div>
         <div id="entries-list"></div>
       </div>
+
     </div>
 
     <div id="graph-container">
-      <div class="row">
+      <div id="graph-header">
         <h2>Food Group Graph</h2>
         <strong id="graph-total">0.00 cal</strong>
       </div>
