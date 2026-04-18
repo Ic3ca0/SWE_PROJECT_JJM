@@ -1,6 +1,5 @@
 const API_BASE = "/api";
 
-// ── Date tab state ──
 let selectedDate = getTodayDate();
 
 function getTodayDate() {
@@ -172,6 +171,7 @@ async function loadFoods() {
 }
 
 function renderFoodsList(foods) {
+  if (!foodsList) return;
   foodsList.innerHTML = "";
 
   if (foods.length === 0) {

@@ -229,16 +229,24 @@
     }
     .btn-primary:hover { background: var(--red-bright); }
 
-    .btn-danger {
+    .btn-danger, .delete-btn {
       background: transparent;
       border: 1px solid var(--red-dim);
-      color: #c07070;
+      color: var(--cream-faint);
       width: auto;
-      padding: 5px 10px;
+      padding: 5px 12px;
       font-size: 11px;
       font-weight: 500;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      flex-shrink: 0;
     }
-    .btn-danger:hover { background: var(--red-dim); color: var(--cream); }
+    .btn-danger:hover, .delete-btn:hover {
+      background: var(--red);
+      border-color: var(--red);
+      color: var(--cream);
+    }
 
     /* ── Cards ── */
     .entry-card, .food-card {
@@ -331,6 +339,13 @@
     }
 
     .small { color: var(--cream-faint); font-size: 12px; }
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
   </style>
 </head>
 <body>
@@ -357,6 +372,22 @@
     <div id="sidebar">
 
       <div class="panel">
+        <div class="panel-header-row">
+          <h2>Daily Log</h2>
+          <strong id="daily-total">0.00 cal</strong>
+        </div>
+        <div id="entries-list"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Log Food</h2>
+        <select id="food-select"></select>
+        <input id="entry-grams" type="number" step="0.01" placeholder="Grams eaten" />
+        <button id="add-entry-btn" class="btn btn-primary">Add Entry</button>
+        <div id="add-entry-message" class="message"></div>
+      </div>
+
+      <div class="panel">
         <h2>Create Food</h2>
         <input id="food-name" type="text" placeholder="Food name" />
         <input id="food-calories" type="number" step="0.01" placeholder="Calories per serving" />
@@ -374,23 +405,6 @@
         </select>
         <button id="create-food-btn" class="btn btn-primary">Save Food</button>
         <div id="create-food-message" class="message"></div>
-      </div>
-
-      <div class="panel">
-        <h2>Log Food</h2>
-        <select id="food-select"></select>
-        <input id="entry-grams" type="number" step="0.01" placeholder="Grams eaten" />
-        <button id="add-entry-btn" class="btn btn-primary">Add Entry</button>
-        <div id="add-entry-message" class="message"></div>
-      </div>
-
-
-      <div class="panel">
-        <div class="panel-header-row">
-          <h2>Daily Log</h2>
-          <strong id="daily-total">0.00 cal</strong>
-        </div>
-        <div id="entries-list"></div>
       </div>
 
     </div>
