@@ -45,11 +45,12 @@ type AddEntryRequest struct {
 }
 
 type GraphNode struct {
-	ID    string  `json:"id"`
-	Label string  `json:"label"`
-	Type  string  `json:"type"`
-	Value float64 `json:"value"`
-	Group string  `json:"group"`
+	ID      string  `json:"id"`
+	Label   string  `json:"label"`
+	Type    string  `json:"type"`
+	Value   float64 `json:"value"`
+	Group   string  `json:"group"`
+	Density float64 `json:"density"` // kcal per gram
 }
 
 type GraphLink struct {
@@ -386,8 +387,12 @@ func buildGraph(entries []FoodEntry) GraphResponse {
 	}
 
 	groupTotals := map[string]float64{}
+	groupGrams := map[string]float64{}
+	groupCalDensity := map[string]float64{} // weighted sum of kcal_per_g * grams
 	for _, e := range entries {
 		groupTotals[e.FoodType] += e.Calories
+		groupGrams[e.FoodType] += e.Grams
+		groupCalDensity[e.FoodType] += e.KcalPerG * e.Grams
 	}
 
 	total := 0.0
@@ -404,24 +409,30 @@ func buildGraph(entries []FoodEntry) GraphResponse {
 		if total > 0 {
 			percent = (calories / total) * 100
 		}
+		avgDensity := 0.0
+		if groupGrams[group] > 0 {
+			avgDensity = round2(groupCalDensity[group] / groupGrams[group])
+		}
 
 		nodes = append(nodes, GraphNode{
-			ID:    group,
-			Label: fmt.Sprintf("%s\n%.2f cal\n%.1f%%", titleCase(group), round2(calories), percent),
-			Type:  "group",
-			Value: round2(calories),
-			Group: group,
+			ID:      group,
+			Label:   fmt.Sprintf("%s\n%.2f cal\n%.1f%%", titleCase(group), round2(calories), percent),
+			Type:    "group",
+			Value:   round2(calories),
+			Group:   group,
+			Density: avgDensity,
 		})
 	}
 
 	for _, e := range entries {
 		nodeID := fmt.Sprintf("entry-%d", e.EntryID)
 		nodes = append(nodes, GraphNode{
-			ID:    nodeID,
-			Label: fmt.Sprintf("%s\n%.0fg\n%.2f cal", titleCase(e.Name), e.Grams, e.Calories),
-			Type:  "food",
-			Value: round2(e.Calories),
-			Group: e.FoodType,
+			ID:      nodeID,
+			Label:   fmt.Sprintf("%s\n%.0fg\n%.2f cal", titleCase(e.Name), e.Grams, e.Calories),
+			Type:    "food",
+			Value:   round2(e.Calories),
+			Group:   e.FoodType,
+			Density: e.KcalPerG,
 		})
 		links = append(links, GraphLink{
 			Source: e.FoodType,
