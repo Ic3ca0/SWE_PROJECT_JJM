@@ -21,28 +21,32 @@ function buildDateTabs() {
     d.setDate(today.getDate() - i);
     const iso = d.toISOString().split("T")[0];
 
-    const tab = document.createElement("div");
-    tab.className = "date-tab" + (iso === selectedDate ? " active" : "");
-    tab.dataset.date = iso;
+    const wrapper = document.createElement("div");
+    wrapper.className = "date-tab-wrapper" + (iso === selectedDate ? " active" : "");
+    wrapper.dataset.date = iso;
 
+    const tab = document.createElement("div");
+    tab.className = "date-tab";
     tab.innerHTML = `
       <span class="tab-day">${days[d.getDay()]}</span>
       <span class="tab-date">${months[d.getMonth()]} ${d.getDate()}</span>
     `;
 
-    tab.addEventListener("click", async () => {
+    wrapper.appendChild(tab);
+
+    wrapper.addEventListener("click", async () => {
       selectedDate = iso;
-      document.querySelectorAll(".date-tab").forEach(t => t.classList.remove("active"));
-      tab.classList.add("active");
+      document.querySelectorAll(".date-tab-wrapper").forEach(t => t.classList.remove("active"));
+      wrapper.classList.add("active");
       await loadEntries();
       await loadGraph();
     });
 
-    tabs.appendChild(tab);
+    tabs.appendChild(wrapper);
   }
 
   // center today's tab in the scroll container
-  const activeTab = tabs.querySelector(".active");
+  const activeTab = tabs.querySelector(".date-tab-wrapper.active");
   if (activeTab) {
     setTimeout(() => {
       const tabLeft = activeTab.offsetLeft;
@@ -225,53 +229,87 @@ async function loadEntries() {
     return;
   }
 
-  for (const entry of data.entries) {
+  const PREVIEW = 3;
+  const entries = [...data.entries].reverse();
+
+  entriesList.innerHTML = "";
+
+  entries.forEach((entry, i) => {
     const card = document.createElement("div");
     card.className = "entry-card";
+    if (i >= PREVIEW) card.style.display = "none";
+
+    const groupAccent = colorForGroup(entry.food_type);
+    card.style.borderLeft = `4px solid ${groupAccent}`;
+
+    const calColor = ["protein"].includes(entry.food_type)
+      ? "var(--accent-protein)"
+      : ["fruit","vegetable"].includes(entry.food_type)
+        ? "var(--accent-green)"
+        : "var(--accent-cal)";
 
     card.innerHTML = `
       <div class="row">
         <div>
           <div><strong>${entry.name}</strong></div>
-          <div class="small">${entry.grams}g • ${entry.food_type} • ${entry.calories} cal</div>
+          <div class="small">${entry.grams}g • ${entry.food_type} • <span style="color:${calColor};font-weight:600">${entry.calories} cal</span></div>
         </div>
         <button class="delete-btn" data-entry-id="${entry.entry_id}">Delete</button>
       </div>
     `;
 
-    entriesList.appendChild(card);
-  }
-
-  document.querySelectorAll("[data-entry-id]").forEach((btn) => {
-    btn.addEventListener("click", async (e) => {
-      const target = e.currentTarget;
-      const entryID = target.dataset.entryId;
-      if (!entryID) return;
-
+    card.querySelector(".delete-btn").addEventListener("click", async () => {
       try {
-        await apiDelete(`${API_BASE}/entry/${entryID}`);
+        await apiDelete(`${API_BASE}/entry/${entry.entry_id}`);
         await refreshAll();
       } catch (err) {
         alert(String(err));
       }
     });
+
+    entriesList.appendChild(card);
   });
+
+  if (entries.length > PREVIEW) {
+    const hidden = entries.length - PREVIEW;
+    const toggle = document.createElement("button");
+    toggle.className = "btn-toggle-log";
+    toggle.textContent = `Show ${hidden} more ▼`;
+    toggle.addEventListener("click", () => {
+      const expanding = toggle.textContent.includes("▼");
+      entriesList.querySelectorAll(".entry-card").forEach((c, i) => {
+        if (i >= PREVIEW) c.style.display = expanding ? "block" : "none";
+      });
+      toggle.textContent = expanding ? "Show less ▲" : `Show ${hidden} more ▼`;
+    });
+    entriesList.appendChild(toggle);
+  }
 }
 
 // graph rendering with d3
+const GROUP_COLORS = {
+  fruit:     "#ffd54f",
+  vegetable: "#81c784",
+  protein:   "#ef9a9a",
+  grains:    "#d7ccc8",
+  dairy:     "#90caf9",
+  fats:      "#ffcc80",
+  beverages: "#80deea",
+  sweets:    "#ce93d8",
+  other:     "#b0bec5",
+};
+
 function colorForGroup(group) {
-  const colors = {
-    fruit: "#ffd54f",
-    vegetable: "#81c784",
-    protein: "#ef9a9a",
-    grains: "#d7ccc8",
-    dairy: "#90caf9",
-    fats: "#ffcc80",
-    beverages: "#80deea",
-    sweets: "#ce93d8",
-    other: "#b0bec5",
-  };
-  return colors[group] || "#b0bec5";
+  return GROUP_COLORS[group] || "#b0bec5";
+}
+
+// lighter tint for stroke (blend toward white)
+function strokeForGroup(group) {
+  const hex = colorForGroup(group).slice(1);
+  const r = Math.min(255, parseInt(hex.slice(0,2),16) + 40);
+  const g = Math.min(255, parseInt(hex.slice(2,4),16) + 40);
+  const b = Math.min(255, parseInt(hex.slice(4,6),16) + 40);
+  return `rgb(${r},${g},${b})`;
 }
 
 async function loadGraph() {
@@ -292,6 +330,19 @@ function renderGraph(data) {
 
   svg.attr("viewBox", `0 0 ${width} ${height}`);
 
+  // define radial gradients for each food group
+  const defs = svg.append("defs");
+  Object.entries(GROUP_COLORS).forEach(([group, baseColor]) => {
+    const grad = defs.append("radialGradient")
+      .attr("id", `grad-${group}`)
+      .attr("cx", "40%").attr("cy", "35%")
+      .attr("r", "60%");
+    grad.append("stop").attr("offset", "0%")
+      .attr("stop-color", strokeForGroup(group)).attr("stop-opacity", 1);
+    grad.append("stop").attr("offset", "100%")
+      .attr("stop-color", baseColor).attr("stop-opacity", 1);
+  });
+
   const nodes = data.nodes.map((d) => ({ ...d }));
   const links = data.links.map((d) => ({ ...d }));
 
@@ -301,9 +352,10 @@ function renderGraph(data) {
     .force("charge", d3.forceManyBody().strength(-500))
     .force("center", d3.forceCenter(width / 2, height / 2))
     .force("collision", d3.forceCollide().radius((d) => {
+      const density = d.density || 0;
       return d.type === "group"
-        ? Math.max(45, d.value * 0.15)
-        : Math.max(22, d.value * 0.08);
+        ? Math.max(45, density * 12 + 10)
+        : Math.max(22, density * 7 + 8);
     }));
 
   const link = svg
@@ -312,9 +364,9 @@ function renderGraph(data) {
     .data(links)
     .enter()
     .append("line")
-    .attr("stroke", "#fff")
-    .attr("stroke-opacity", 0.8)
-    .attr("stroke-width", 1.5);
+    .attr("stroke-opacity", 0.6)
+    .attr("stroke-width", 1.5)
+    .attr("stroke-dasharray", "5,4");
 
   const node = svg
     .append("g")
@@ -325,12 +377,16 @@ function renderGraph(data) {
 
   node
     .append("circle")
-    .attr("r", (d) =>
-      d.type === "group"
-        ? Math.max(35, d.value * 0.12)
-        : Math.max(14, d.value * 0.06)
-    )
-    .attr("fill", (d) => colorForGroup(d.group));
+    .attr("r", (d) => {
+      const density = d.density || 0;
+      return d.type === "group"
+        ? Math.max(35, density * 12)
+        : Math.max(14, density * 7);
+    })
+    .attr("fill", (d) => `url(#grad-${d.group})`)
+    .attr("stroke", (d) => strokeForGroup(d.group))
+    .attr("stroke-width", (d) => d.type === "group" ? 2.5 : 2)
+    .attr("stroke-opacity", 0.85);
 
   node
     .append("text")
@@ -370,6 +426,7 @@ function renderGraph(data) {
 
   simulation.on("tick", () => {
     link
+      .attr("stroke", (d) => colorForGroup(d.source.group || d.source.id))
       .attr("x1", (d) => d.source.x)
       .attr("y1", (d) => d.source.y)
       .attr("x2", (d) => d.target.x)
