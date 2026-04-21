@@ -88,6 +88,7 @@ func main() {
 	http.HandleFunc("/api/entry/", withCORS(withAuth(handleDeleteEntry)))
 	http.HandleFunc("/api/entries", withCORS(withAuth(handleGetEntries)))
 	http.HandleFunc("/api/graph", withCORS(withAuth(handleGraph)))
+	http.HandleFunc("/api/ai/chat", withCORS(withAuth(handleAIChat)))
 
 	fs := http.FileServer(http.Dir("../frontend"))
 	http.Handle("/", fs)

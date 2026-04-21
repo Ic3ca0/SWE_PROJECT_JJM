@@ -469,3 +469,20 @@
   <script type="module" src="./script.js"></script>
 </body>
 </html>
+
+<!-- AI Chat UI -->
+<div id="ai-chat-ui">
+  <button id="open-chat-btn" title="Open assistant" style="position:fixed;right:20px;bottom:20px;width:56px;height:56px;border-radius:28px;background:#a01e1e;color:#fff;border:none;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,0.4);font-weight:700;">AI</button>
+
+  <div id="ai-chat-modal" style="display:none;position:fixed;right:20px;bottom:88px;width:360px;height:480px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,0.6);z-index:9999;">
+    <div style="padding:10px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+      <div style="font-weight:700;color:var(--cream);">Assistant</div>
+      <button id="close-chat-btn" style="background:transparent;border:none;color:var(--cream-faint);cursor:pointer;padding:6px 8px;">✕</button>
+    </div>
+    <div id="ai-chat-messages" style="padding:12px;overflow:auto;height:360px;color:var(--cream);font-size:13px;">Loading...</div>
+    <form id="ai-chat-form" style="display:flex;gap:8px;padding:10px;border-top:1px solid var(--border);">
+      <input id="ai-chat-input" type="text" placeholder="Ask about your diet or logs..." style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--cream);" />
+      <button type="submit" class="btn btn-primary" style="padding:8px 10px;width:86px;">Send</button>
+    </form>
+  </div>
+</div>

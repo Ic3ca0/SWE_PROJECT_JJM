@@ -513,3 +513,56 @@ checkAuth().then((ok) => {
     refreshAll();
   }
 });
+
+// ----- AI chat UI behavior -----
+const openChatBtn = document.getElementById("open-chat-btn");
+const closeChatBtn = document.getElementById("close-chat-btn");
+const chatModal = document.getElementById("ai-chat-modal");
+const chatMessages = document.getElementById("ai-chat-messages");
+const chatForm = document.getElementById("ai-chat-form");
+const chatInput = document.getElementById("ai-chat-input");
+
+function appendChatMessage(who, text) {
+  const el = document.createElement("div");
+  el.style.marginBottom = "8px";
+  el.innerHTML = `<div style="font-size:11px;color:var(--cream-faint);margin-bottom:4px">${who}</div><div style="background:var(--bg3);padding:8px;border-radius:8px;border:1px solid var(--border);">${text}</div>`;
+  chatMessages.appendChild(el);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+openChatBtn.addEventListener("click", () => {
+  chatModal.style.display = "block";
+  chatMessages.innerHTML = "";
+  appendChatMessage("Assistant", "Hi — I can analyze your food logs and give suggestions. Ask me a question or press Send to get a summary.");
+});
+
+closeChatBtn.addEventListener("click", () => {
+  chatModal.style.display = "none";
+});
+
+chatForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = chatInput.value.trim();
+  if (!msg) return;
+  appendChatMessage("You", msg);
+  chatInput.value = "";
+  appendChatMessage("Assistant", "Thinking...");
+
+  try {
+    const res = await apiPost(`${API_BASE}/ai/chat`, { message: msg });
+    // remove the last 'Thinking...' message
+    const last = chatMessages.lastChild;
+    if (last && last.textContent && last.textContent.includes("Thinking")) {
+      chatMessages.removeChild(last);
+    }
+    if (res) {
+      if (typeof res.reply === "string") {
+        appendChatMessage("Assistant", res.reply.replace(/\n/g, "<br/>"));
+      } else {
+        appendChatMessage("Assistant", JSON.stringify(res, null, 2));
+      }
+    }
+  } catch (err) {
+    appendChatMessage("Assistant", `Error: ${err.message || err}`);
+  }
+});
